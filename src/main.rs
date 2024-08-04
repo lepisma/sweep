@@ -98,6 +98,48 @@ struct ResponseMetadata {
     next_cursor: Option<String>,
 }
 
+async fn get<T>(slack_client: &SlackClient, route: &str, data: HashMap<&str, String>) -> Result<T>
+where
+    T: DeserializeOwned + SlackApiResponse,
+{
+    let client = reqwest::Client::new();
+
+    loop {
+
+        let url = reqwest::Url::parse_with_params(&format!("https://slack.com/api/{}", route), &data)?;
+
+        let response = client.get(url)
+            .header(AUTHORIZATION, format!("Bearer {}", slack_client.token))
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "application/json")
+            .send()
+            .await?;
+
+        let retry_after = get_retry_after(&response);
+
+        let parsed: T = response.json::<T>().await?;
+
+        if !parsed.is_ok() {
+            match parsed.get_error() {
+                Some(error_message) => {
+                    if error_message == "ratelimited" {
+                        info!("Rate limited, retrying after {} seconds.", retry_after);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(retry_after)).await;
+                    } else {
+                        warn!("Error {} in {}", error_message, route);
+                        return Err(anyhow::anyhow!(error_message.clone()));
+                    }
+                }
+                None => {
+                    return Err(anyhow::anyhow!("Unknown error"));
+                }
+            }
+        } else {
+            return Ok(parsed);
+        }
+    }
+}
+
 async fn post<T>(slack_client: &SlackClient, route: &str, data: HashMap<&str, String>) -> Result<T>
 where
     T: DeserializeOwned + SlackApiResponse,
@@ -186,7 +228,7 @@ async fn get_replies(slack_client: &SlackClient, conversation_id: &str, thread_t
         ("ts", thread_ts.to_string()),
     ]);
 
-    post(slack_client, "/conversations.replies", map).await
+    get(slack_client, "/conversations.replies", map).await
 }
 
 fn get_messages<'a>(
