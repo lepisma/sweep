@@ -272,8 +272,8 @@ async fn main() -> Result<()> {
         bar.inc(1);
     }
 
-    println!("Processed {} messages, deleted {}.", n_messages, n_deleted);
     bar.finish();
+    println!("Processed {} messages, deleted {}.", n_messages, n_deleted);
 
     Ok(())
 }
