@@ -1,5 +1,7 @@
 #+TITLE: sweep
 
+[[https://img.shields.io/github/v/tag/lepisma/sweep.svg][tag]] [[https://img.shields.io/github/actions/workflow/status/lepisma/sweep/rust.yml.svg][workflow]]
+
 /Sweep/ personal messages from Slack DMs (including deactivated), groups, and
 channels. I am using this repository to learn Rust so the code will be in a bad
 state.
