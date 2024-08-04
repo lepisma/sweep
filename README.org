@@ -1,10 +1,11 @@
 #+TITLE: sweep
 
-Tools for deleting personal data from corporate systems. I am also just trying
-to learn Rust so the code will be in a bad state.
+/Sweep/ personal messages from Slack DMs (including deactivated), groups, and
+channels. I am using this repository to learn Rust so the code will be in a bad
+state.
 
-As of now sweep only handles Slack self-messages from any dm, group, or channel.
-You will need a /user key/ with the following permissions:
+To use, you will need to create a Slack app with the following permissions on a
+/user key/:
 
 - ~channels:history~
 - ~groups:history~
@@ -19,5 +20,5 @@ Then do the following:
 #+begin_src shell
   # User ID is to filter your messages. Conversation ID is the ID of the DM,
   # group, or channel to clean up.
-  cargo run -- <USER-ID> <CONVERSATION-ID>
+  sweep <USER-ID> <CONVERSATION-ID>
 #+end_src
