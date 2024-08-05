@@ -206,20 +206,12 @@ fn get_messages<'a>(
                 Ok(history) => {
                     if let Some(messages) = history.messages {
                         for message in messages {
-                            match message.thread_ts.clone() {
-                                Some(thread_ts) => {
-                                    let replies = get_replies(slack_client, conversation_id, &thread_ts).await;
-
-                                    match replies {
-                                        Ok(replies) => {
-                                            for reply in replies.messages.unwrap_or_default() {
-                                                yield reply;
-                                            }
-                                        }
-                                        Err(_e) => {}
+                            if let Some(thread_ts) = message.thread_ts.clone() {
+                                if let Ok(replies) = get_replies(slack_client, conversation_id, &thread_ts).await {
+                                    for reply in replies.messages.unwrap_or_default() {
+                                        yield reply;
                                     }
                                 }
-                                None => {}
                             }
                             yield message;
                         }
@@ -230,9 +222,7 @@ fn get_messages<'a>(
                         break;
                     }
                 }
-                Err(_e) => {
-                    break;
-                }
+                Err(_) => break,
             }
         }
     }
