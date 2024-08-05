@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 use futures_util::{Stream, StreamExt};
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{info, warn, debug};
+use log::{info, warn};
 use reqwest::{
-    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, RETRY_AFTER},
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     Response,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -180,20 +180,13 @@ where
     }
 }
 
-fn get_retry_after(response: &Response) -> u64 {
-    let default = 1;
-
-    match response.headers().get(RETRY_AFTER) {
-        Some(value) => match value.to_str() {
-            Ok(value) => match value.parse::<u64>() {
-                Ok(number) => number,
-                Err(_) => default,
-            },
-            Err(_) => default,
-        },
-        None => default,
-    }
+/// Return time to retry after. Slack's RETRY_AFTER header values are too
+/// conservative so we just default to 1 seconds to extract the maximum juice of
+/// the rate limits.
+fn get_retry_after(_response: &Response) -> u64 {
+    return 1;
 }
+
 
 /// Delete given message. Doesn't care if the app has permission for the
 /// message. The calling function will ensure that to happen.
@@ -207,8 +200,8 @@ async fn delete_message(slack_client: &SlackClient, conversation_id: &str, ts: &
     Ok(())
 }
 
-/// Get history of a conversation id. As of now only return 200 results. This
-/// will get converted to a stream later for proper functioning.
+/// Get history of a conversation id with a limit of 200 results. The caller has
+/// to handle pagination using cursor.
 async fn get_history(slack_client: &SlackClient, conversation_id: &str, cursor: Option<&str>) -> Result<HistoryResponse> {
     let mut map = HashMap::from([
         ("channel", conversation_id.to_string()),
