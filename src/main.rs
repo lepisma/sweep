@@ -251,14 +251,11 @@ async fn main() -> Result<()> {
         .progress_chars("#>-"));
 
     while let Some(message) = message_stream.next().await {
-        match message.user {
-            Some(user_id) => {
-                if user_id == args.user_id {
-                    let _ = delete_message(&slack_client, &args.conversation_id, &message.ts).await;
-                    n_deleted += 1;
-                }
+        if let Some(user_id) = message.user {
+            if user_id == args.user_id {
+                let _ = delete_message(&slack_client, &args.conversation_id, &message.ts).await;
+                n_deleted += 1;
             }
-            None => {}
         }
         n_messages += 1;
 
