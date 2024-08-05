@@ -4,8 +4,7 @@ use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use reqwest::{
-    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-    Response,
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE}, Method, Response
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
@@ -98,7 +97,7 @@ struct ResponseMetadata {
     next_cursor: Option<String>,
 }
 
-async fn get<T>(slack_client: &SlackClient, route: &str, data: HashMap<&str, String>) -> Result<T>
+async fn send_request<T>(slack_client: &SlackClient, method: Method, route: &str, data: HashMap<&str, String>) -> Result<T>
 where
     T: DeserializeOwned + SlackApiResponse,
 {
@@ -106,58 +105,28 @@ where
 
     loop {
 
-        let url = reqwest::Url::parse_with_params(&format!("https://slack.com/api/{}", route), &data)?;
+        let request = match method {
+            Method::GET => {
+                let url = reqwest::Url::parse_with_params(&format!("https://slack.com/api/{}", route), &data)?;
+                client.get(url)
+                    .header(AUTHORIZATION, format!("Bearer {}", slack_client.token))
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .header(ACCEPT, "application/json")
+            },
+            Method::POST => {
+                client.post(format!("https://slack.com/api/{}", route))
+                    .header(AUTHORIZATION, format!("Bearer {}", slack_client.token))
+                    .header(CONTENT_TYPE, "application/json")
+                    .header(ACCEPT, "application/json")
+                    .json(&data)
+            },
+            _ => unimplemented!(),
+        };
 
-        let response = client.get(url)
-            .header(AUTHORIZATION, format!("Bearer {}", slack_client.token))
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(ACCEPT, "application/json")
-            .send()
-            .await?;
-
+        let response = request.send().await?;
         let retry_after = get_retry_after(&response);
 
         let parsed: T = response.json::<T>().await?;
-
-        if !parsed.is_ok() {
-            match parsed.get_error() {
-                Some(error_message) => {
-                    if error_message == "ratelimited" {
-                        info!("Rate limited, retrying after {} seconds.", retry_after);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(retry_after)).await;
-                    } else {
-                        warn!("Error {} in {}", error_message, route);
-                        return Err(anyhow::anyhow!(error_message.clone()));
-                    }
-                }
-                None => {
-                    return Err(anyhow::anyhow!("Unknown error"));
-                }
-            }
-        } else {
-            return Ok(parsed);
-        }
-    }
-}
-
-async fn post<T>(slack_client: &SlackClient, route: &str, data: HashMap<&str, String>) -> Result<T>
-where
-    T: DeserializeOwned + SlackApiResponse,
-{
-    let client = reqwest::Client::new();
-
-    loop {
-        let response = client
-            .post(format!("https://slack.com/api/{}", route))
-            .header(AUTHORIZATION, format!("Bearer {}", slack_client.token))
-            .header(CONTENT_TYPE, "application/json")
-            .header(ACCEPT, "application/json")
-            .json(&data)
-            .send()
-            .await?;
-        let retry_after = get_retry_after(&response);
-
-        let parsed = response.json::<T>().await?;
 
         if !parsed.is_ok() {
             match parsed.get_error() {
@@ -187,7 +156,6 @@ fn get_retry_after(_response: &Response) -> u64 {
     return 1;
 }
 
-
 /// Delete given message. Doesn't care if the app has permission for the
 /// message. The calling function will ensure that to happen.
 async fn delete_message(slack_client: &SlackClient, conversation_id: &str, ts: &str) -> Result<()> {
@@ -196,7 +164,7 @@ async fn delete_message(slack_client: &SlackClient, conversation_id: &str, ts: &
         ("ts", ts.to_string()),
     ]);
 
-    let _response: DeleteResponse = post(slack_client, "/chat.delete", map).await?;
+    let _response: DeleteResponse = send_request(slack_client, Method::POST, "/chat.delete", map).await?;
     Ok(())
 }
 
@@ -212,7 +180,7 @@ async fn get_history(slack_client: &SlackClient, conversation_id: &str, cursor: 
         map.insert("cursor", cursor.to_string());
     }
 
-    post(slack_client, "/conversations.history", map).await
+    send_request(slack_client, Method::POST, "/conversations.history", map).await
 }
 
 async fn get_replies(slack_client: &SlackClient, conversation_id: &str, thread_ts: &str) -> Result<RepliesResponse> {
@@ -221,7 +189,7 @@ async fn get_replies(slack_client: &SlackClient, conversation_id: &str, thread_t
         ("ts", thread_ts.to_string()),
     ]);
 
-    get(slack_client, "/conversations.replies", map).await
+    send_request(slack_client, Method::GET, "/conversations.replies", map).await
 }
 
 fn get_messages<'a>(
