@@ -24,3 +24,6 @@ Then do the following:
   # group, or channel to clean up.
   sweep <USER-ID> <CONVERSATION-ID>
 #+end_src
+
+As of now Slack's API have time based rate limits of a form where concurrent
+requests don't help, so sweep does sequential deletions.
